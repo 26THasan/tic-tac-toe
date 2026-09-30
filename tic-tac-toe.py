@@ -39,13 +39,28 @@ def log_move(move_str):
         f.write(move_str + "\n")
 
 
+def score_line(scores, mode):
+    """Build a one-line summary of the current scores."""
+    if mode == "1":
+        x_name, o_name = "You (X)", "Computer (O)"
+    else:
+        x_name, o_name = "Player X", "Player O"
+    return f"{x_name}: {scores['X']} | {o_name}: {scores['O']} | Draws: {scores['Draws']}"
+
+
+def display_scores(scores, mode):
+    print("\n=== SCOREBOARD ===")
+    print(score_line(scores, mode))
+    print("==================\n")
+
+
 def minimax(board, is_maximizing, ai, human, depth):
     """Score a position: positive is good for the AI, negative is good for the human."""
     winner = check_winner(board)
     if winner == ai:
-        return 10 - depth      
+        return 10 - depth
     if winner == human:
-        return depth - 10      
+        return depth - 10
     if check_draw(board):
         return 0
 
@@ -89,6 +104,7 @@ def best_move(board, ai, human):
 
 def play_tic_tac_toe():
     playing_rounds = True
+    scores = {"X": 0, "O": 0, "Draws": 0}
 
     try:
         with open("history.txt", "r") as f:
@@ -151,18 +167,26 @@ def play_tic_tac_toe():
             if winner:
                 print(f"Player {winner} wins this round!")
                 log_move(f"Result: Player {winner} won this round.")
+                scores[winner] += 1
                 game_over = True
             elif check_draw(board):
                 print("It's a draw! The board is full.")
                 log_move("Result: Draw match.")
+                scores["Draws"] += 1
                 game_over = True
             else:
                 current_player = "O" if current_player == "X" else "X"
 
+        display_scores(scores, mode)
+        log_move(f"Score after this round - {score_line(scores, mode)}")
+
         rematch = input("Would you like to play another round? (Y/N): ").strip().lower()
         if rematch not in ['y', 'yes']:
             playing_rounds = False
+            print("\nFinal scores:")
+            print(score_line(scores, mode))
             print("\nThanks for playing! Goodbye.")
+            log_move(f"Final score - {score_line(scores, mode)}")
         else:
             print("\nStarting a fresh match...")
 
