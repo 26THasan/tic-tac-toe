@@ -116,11 +116,17 @@ def best_move(board, ai, human):
     return move
 
 
-# ---------- Replay mode ----------
+# ---------- Reading the history file ----------
 
 def load_matches():
     """Read history.txt and return a list of matches.
-    Each match is a dict: {"header": str, "moves": [(player, row, col), ...], "result": str}
+    Each match is a dict with:
+      header    - the match header text
+      timestamp - when the match started
+      mode      - "vs Computer" or "Two players"
+      moves     - list of (player, row, col)
+      result    - the result text
+      outcome   - "X", "O", "Draw", or None if the match never finished
     """
     matches = []
     current = None
@@ -131,28 +137,43 @@ def load_matches():
     except FileNotFoundError:
         return matches
 
+    header_pattern = re.compile(r"--- New Match Started(?: \((.+?)\))?: (.+?) ---")
     move_pattern = re.compile(r"Player (\w) placed at row (\d), col (\d)")
 
     for line in lines:
         line = line.strip()
 
-        if line.startswith("--- New Match Started"):
+        header_match = header_pattern.match(line)
+        if header_match:
+            mode, timestamp = header_match.groups()
             current = {
                 "header": line.strip("- ").strip(),
+                "timestamp": timestamp,
+                # Older entries have no mode in the header; they were two-player games
+                "mode": mode if mode else "Two players",
                 "moves": [],
                 "result": "No result recorded",
+                "outcome": None,
             }
             matches.append(current)
         elif current is not None:
-            match = move_pattern.match(line)
-            if match:
-                player, row, col = match.groups()
+            move_match = move_pattern.match(line)
+            if move_match:
+                player, row, col = move_match.groups()
                 current["moves"].append((player, int(row), int(col)))
             elif line.startswith("Result:"):
                 current["result"] = line[len("Result:"):].strip()
+                if "Draw" in line:
+                    current["outcome"] = "Draw"
+                elif "Player X won" in line:
+                    current["outcome"] = "X"
+                elif "Player O won" in line:
+                    current["outcome"] = "O"
 
     return matches
 
+
+# ---------- Replay mode ----------
 
 def replay_match(match):
     board = [["", "", ""], ["", "", ""], ["", "", ""]]
@@ -206,6 +227,85 @@ def replay_mode():
         replay_match(matches[index])
 
 
+# ---------- Stats ----------
+
+def percent(part, total):
+    return f"{part / total * 100:.0f}%" if total else "0%"
+
+
+def tally(matches):
+    """Count X wins, O wins, and draws in a list of matches."""
+    return {
+        "X": sum(1 for m in matches if m["outcome"] == "X"),
+        "O": sum(1 for m in matches if m["outcome"] == "O"),
+        "Draw": sum(1 for m in matches if m["outcome"] == "Draw"),
+    }
+
+
+def show_stats():
+    matches = load_matches()
+
+    if not matches:
+        print("\nNo saved matches found yet. Play a game first!\n")
+        return
+
+    completed = [m for m in matches if m["outcome"] is not None]
+    unfinished = len(matches) - len(completed)
+    total = len(completed)
+
+    print("\n==================== STATS ====================")
+    print(f"Matches recorded: {len(matches)}")
+    print(f"Completed:        {total}")
+    if unfinished:
+        print(f"Unfinished:       {unfinished}")
+
+    if total == 0:
+        print("===============================================\n")
+        return
+
+    # Overall results
+    overall = tally(completed)
+    print("\n--- Overall results ---")
+    print(f"X wins: {overall['X']} ({percent(overall['X'], total)})")
+    print(f"O wins: {overall['O']} ({percent(overall['O'], total)})")
+    print(f"Draws:  {overall['Draw']} ({percent(overall['Draw'], total)})")
+
+    # Per mode
+    vs_computer = [m for m in completed if m["mode"] == "vs Computer"]
+    two_player = [m for m in completed if m["mode"] == "Two players"]
+
+    if vs_computer:
+        t = tally(vs_computer)
+        n = len(vs_computer)
+        print(f"\n--- vs Computer ({n} games) ---")
+        print(f"You won:      {t['X']} ({percent(t['X'], n)})")
+        print(f"Computer won: {t['O']} ({percent(t['O'], n)})")
+        print(f"Draws:        {t['Draw']} ({percent(t['Draw'], n)})")
+
+    if two_player:
+        t = tally(two_player)
+        n = len(two_player)
+        print(f"\n--- Two players ({n} games) ---")
+        print(f"Player X won: {t['X']} ({percent(t['X'], n)})")
+        print(f"Player O won: {t['O']} ({percent(t['O'], n)})")
+        print(f"Draws:        {t['Draw']} ({percent(t['Draw'], n)})")
+
+    # Game length
+    lengths = [len(m["moves"]) for m in completed]
+    print("\n--- Game length ---")
+    print(f"Average: {sum(lengths) / len(lengths):.1f} moves")
+    print(f"Shortest: {min(lengths)} moves")
+    print(f"Longest:  {max(lengths)} moves")
+
+    # Most recent
+    last = matches[-1]
+    print("\n--- Most recent match ---")
+    print(f"Started: {last['timestamp']} ({last['mode']})")
+    print(f"Result:  {last['result']}")
+    print("===============================================\n")
+
+
+# ---------- Playing ----------
 
 def play_tic_tac_toe():
     playing_rounds = True
@@ -292,7 +392,8 @@ def main():
         print("\n--- Main Menu ---")
         print("1. Play a game")
         print("2. Replay a past match")
-        print("3. Quit")
+        print("3. View stats")
+        print("4. Quit")
         choice = input("Choose an option: ").strip()
 
         if choice == "1":
@@ -300,10 +401,12 @@ def main():
         elif choice == "2":
             replay_mode()
         elif choice == "3":
+            show_stats()
+        elif choice == "4":
             print("\nThanks for playing! Goodbye.")
             break
         else:
-            print("Please enter 1, 2, or 3.")
+            print("Please enter 1, 2, 3, or 4.")
 
 
 main()
