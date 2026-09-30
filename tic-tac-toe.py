@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 
@@ -37,6 +38,19 @@ def check_draw(board):
 def log_move(move_str):
     with open("history.txt", "a") as f:
         f.write(move_str + "\n")
+
+
+def ensure_history_file():
+    """Write the title line only if the history file is new or empty."""
+    try:
+        with open("history.txt", "r") as f:
+            has_content = f.read().strip() != ""
+    except FileNotFoundError:
+        has_content = False
+
+    if not has_content:
+        with open("history.txt", "a") as f:
+            f.write("=== Tic-Tac-Toe Game History ===\n")
 
 
 def score_line(scores, mode):
@@ -102,21 +116,101 @@ def best_move(board, ai, human):
     return move
 
 
+# ---------- Replay mode ----------
+
+def load_matches():
+    """Read history.txt and return a list of matches.
+    Each match is a dict: {"header": str, "moves": [(player, row, col), ...], "result": str}
+    """
+    matches = []
+    current = None
+
+    try:
+        with open("history.txt", "r") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return matches
+
+    move_pattern = re.compile(r"Player (\w) placed at row (\d), col (\d)")
+
+    for line in lines:
+        line = line.strip()
+
+        if line.startswith("--- New Match Started"):
+            current = {
+                "header": line.strip("- ").strip(),
+                "moves": [],
+                "result": "No result recorded",
+            }
+            matches.append(current)
+        elif current is not None:
+            match = move_pattern.match(line)
+            if match:
+                player, row, col = match.groups()
+                current["moves"].append((player, int(row), int(col)))
+            elif line.startswith("Result:"):
+                current["result"] = line[len("Result:"):].strip()
+
+    return matches
+
+
+def replay_match(match):
+    board = [["", "", ""], ["", "", ""], ["", "", ""]]
+    total = len(match["moves"])
+
+    print(f"\n=== Replaying: {match['header']} ===")
+    display_board(board)
+
+    for number, (player, row, col) in enumerate(match["moves"], 1):
+        choice = input(f"Press Enter for move {number}/{total} (or type Q to stop): ").strip().lower()
+        if choice == "q":
+            print("Replay stopped.")
+            return
+
+        board[row][col] = player
+        print(f"Move {number}: Player {player} placed at row {row}, col {col}")
+        display_board(board)
+
+    print(f"Result: {match['result']}")
+    print("End of replay.\n")
+
+
+def replay_mode():
+    matches = load_matches()
+
+    if not matches:
+        print("\nNo saved matches found yet. Play a game first!\n")
+        return
+
+    while True:
+        print("\n=== Past Matches (most recent 10) ===")
+        start = max(0, len(matches) - 10)
+        for i in range(start, len(matches)):
+            m = matches[i]
+            print(f"{i + 1}. {m['header']} - {len(m['moves'])} moves - {m['result']}")
+
+        choice = input("\nEnter a match number to replay (or B to go back): ").strip().lower()
+        if choice == "b":
+            return
+
+        try:
+            index = int(choice) - 1
+        except ValueError:
+            print("Please enter a match number or B.")
+            continue
+
+        if not (0 <= index < len(matches)):
+            print("That match number doesn't exist.")
+            continue
+
+        replay_match(matches[index])
+
+
+
 def play_tic_tac_toe():
     playing_rounds = True
     scores = {"X": 0, "O": 0, "Draws": 0}
 
-    try:
-        with open("history.txt", "r") as f:
-            has_content = f.read().strip() != ""
-    except FileNotFoundError:
-        has_content = False
-
-    if not has_content:
-        with open("history.txt", "a") as f:
-            f.write("=== Tic-Tac-Toe Game History ===\n")
-
-    print("=== Welcome to Tic-Tac-Toe! ===")
     mode = ""
     while mode not in ["1", "2"]:
         mode = input("Choose mode - 1: Play vs Computer, 2: Two players: ").strip()
@@ -185,10 +279,31 @@ def play_tic_tac_toe():
             playing_rounds = False
             print("\nFinal scores:")
             print(score_line(scores, mode))
-            print("\nThanks for playing! Goodbye.")
             log_move(f"Final score - {score_line(scores, mode)}")
         else:
             print("\nStarting a fresh match...")
 
 
-play_tic_tac_toe()
+def main():
+    ensure_history_file()
+    print("=== Welcome to Tic-Tac-Toe! ===")
+
+    while True:
+        print("\n--- Main Menu ---")
+        print("1. Play a game")
+        print("2. Replay a past match")
+        print("3. Quit")
+        choice = input("Choose an option: ").strip()
+
+        if choice == "1":
+            play_tic_tac_toe()
+        elif choice == "2":
+            replay_mode()
+        elif choice == "3":
+            print("\nThanks for playing! Goodbye.")
+            break
+        else:
+            print("Please enter 1, 2, or 3.")
+
+
+main()
