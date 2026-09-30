@@ -7,6 +7,7 @@ HISTORY_FILE = "history.txt"
 CELL_BG = "#f4f1ea"
 WIN_BG = "#b7e4c7"
 COLORS = {"X": "#1d6fb8", "O": "#c8372d"}
+HINT_FG = "#b5b0a3"  # colour of the 1-9 hints in Numbers style
 
 LINES = (
     [[(r, 0), (r, 1), (r, 2)] for r in range(3)]
@@ -15,6 +16,7 @@ LINES = (
 )
 
 
+# ---------- Game logic ----------
 
 def winning_line(board):
     for a, b, c in LINES:
@@ -66,6 +68,7 @@ def best_move(board, ai, human):
     return move
 
 
+# ---------- History file ----------
 
 def log_move(text):
     with open(HISTORY_FILE, "a") as f:
@@ -157,7 +160,7 @@ def build_stats_text(matches):
     return "\n".join(out)
 
 
-
+# ---------- GUI helpers ----------
 
 def build_grid(parent, font_size, width, height, on_click=None):
     cells = []
@@ -179,14 +182,17 @@ def set_cell(lbl, player):
     lbl.config(text=player, fg=COLORS.get(player, "black"), bg=CELL_BG)
 
 
+# ---------- Main app ----------
 
 class TicTacToeApp:
     def __init__(self, root):
         self.root = root
         root.title("Tic-Tac-Toe")
         root.resizable(False, False)
+        root.bind("<Key>", self.on_key)
 
         self.mode = tk.StringVar(value="vs Computer")
+        self.style = tk.StringVar(value="Classic")
         self.scores = {"X": 0, "O": 0, "Draws": 0}
         self.board = [[""] * 3 for _ in range(3)]
         self.current = "X"
@@ -207,9 +213,11 @@ class TicTacToeApp:
         controls.pack(pady=(4, 14))
         tk.OptionMenu(controls, self.mode, "vs Computer", "Two players",
                       command=lambda _: self.change_mode()).grid(row=0, column=0, padx=4)
-        tk.Button(controls, text="New Game", command=self.new_game).grid(row=0, column=1, padx=4)
-        tk.Button(controls, text="Replay", command=self.open_replay).grid(row=0, column=2, padx=4)
-        tk.Button(controls, text="Stats", command=self.open_stats).grid(row=0, column=3, padx=4)
+        tk.OptionMenu(controls, self.style, "Classic", "Numbers",
+                      command=lambda _: self.refresh_empty_cells()).grid(row=0, column=1, padx=4)
+        tk.Button(controls, text="New Game", command=self.new_game).grid(row=0, column=2, padx=4)
+        tk.Button(controls, text="Replay", command=self.open_replay).grid(row=0, column=3, padx=4)
+        tk.Button(controls, text="Stats", command=self.open_stats).grid(row=0, column=4, padx=4)
 
         self.new_game()
 
@@ -239,9 +247,26 @@ class TicTacToeApp:
         self.header_logged = False
         for row in self.cells:
             for lbl in row:
-                lbl.config(text="", bg=CELL_BG)
+                lbl.config(bg=CELL_BG)
+        self.refresh_empty_cells()
         self.refresh_scores()
         self.status.config(text="X's turn")
+
+    def refresh_empty_cells(self):
+        """Show 1-9 hints in empty squares (Numbers style) or leave them blank (Classic)."""
+        numbers = self.style.get() == "Numbers"
+        for r in range(3):
+            for c in range(3):
+                if self.board[r][c] == "":
+                    self.cells[r][c].config(text=str(r * 3 + c + 1) if numbers else "",
+                                            fg=HINT_FG)
+
+    def on_key(self, event):
+        # Number keys only work in Numbers style; on_click already ignores
+        # taken squares, finished games and the computer's turn.
+        if self.style.get() == "Numbers" and event.char in tuple("123456789"):
+            r, c = divmod(int(event.char) - 1, 3)
+            self.on_click(r, c)
 
     def on_click(self, r, c):
         if self.game_over or self.busy or self.board[r][c] != "":
